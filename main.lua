@@ -22,7 +22,8 @@ ACT_SPIN_JUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FL
 ACT_WALL_SLIDE = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_MOVING | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_ROLL = allocate_mario_action(ACT_GROUP_MOVING)
 ACT_AIR_DASH = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
-local ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
+ACT_WATER_SPIN = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
+ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 
 local PACKET_MOVESET = 100
 
@@ -50,7 +51,28 @@ local SPINACTIONS = {
     [ACT_BACKFLIP] = true,
     [ACT_FREEFALL] = true,
     [ACT_FLYING] = true,
-    [ACT_WATER_JUMP] = true
+    [ACT_WATER_JUMP] = true,
+    
+    [ACT_BREASTSTROKE] = true,
+    [ACT_HOLD_BREASTSTROKE] = true,
+    [ACT_WATER_PUNCH] = true,
+    [ACT_WATER_IDLE] = true,
+    [ACT_WATER_PLUNGE] = true,
+    [ACT_HOLD_SWIMMING_END] = true,
+    [ACT_WATER_ACTION_END] = true,
+    [ACT_HOLD_WATER_IDLE] = true,
+    [ACT_HOLD_WATER_ACTION_END] = true
+}
+local WATERACTIONS = {
+    [ACT_BREASTSTROKE] = true,
+    [ACT_HOLD_BREASTSTROKE] = true,
+    [ACT_WATER_PUNCH] = true,
+    [ACT_WATER_IDLE] = true,
+    [ACT_WATER_PLUNGE] = true,
+    [ACT_HOLD_SWIMMING_END] = true,
+    [ACT_WATER_ACTION_END] = true,
+    [ACT_HOLD_WATER_IDLE] = true,
+    [ACT_HOLD_WATER_ACTION_END] = true
 }
 local fromGround = false
 
@@ -206,6 +228,134 @@ end
 
 local function act_fake_freefall(m)
     common_air_action_step(m, ACT_FREEFALL, MARIO_ANIM_GENERAL_FALL, AIR_STEP_CHECK_LEDGE_GRAB | AIR_STEP_CHECK_HANG)
+end
+
+local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
+    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then
+        return false
+    end
+    local e = gMarioStateExtras[m.playerIndex]
+
+    m.marioBodyState.handState = MARIO_HAND_OPEN
+
+    if m.actionTimer == 0 then
+        e.spinSpeed = 1
+        play_sound_with_freq_scale(SOUND_ACTION_SWIM_FAST, m.marioObj.header.gfx.cameraToObject, 1.75)
+        mario_set_forward_vel(m,math.max(math.min(m.forwardVel+35,90),40))
+    end
+
+    e.spinSpeed = e.spinSpeed * 0.78
+    set_mario_animation(m, CHAR_ANIM_START_TWIRL)
+    set_mario_particle_flags(m, PARTICLE_SPARKLES, 0)
+
+    if m.actionTimer > 20 then
+        set_mario_action(m, ACT_WATER_ACTION_END, 0)
+    else
+        local targetPitch = -252.0 * m.controller.stickY
+        local pitchVel;
+        if (m.faceAngle.x < 0) then
+            pitchVel = 0x100;
+        else
+            pitchVel = 0x200;
+        end
+
+        if (m.faceAngle.x < targetPitch) then
+            m.faceAngle.x = m.faceAngle.x + pitchVel
+            if (m.faceAngle.x > targetPitch) then
+                m.faceAngle.x = targetPitch;
+            end
+        elseif (m.faceAngle.x > targetPitch) then
+            m.faceAngle.x = m.faceAngle.x - pitchVel
+            if (m.faceAngle.x < targetPitch) then
+                m.faceAngle.x = targetPitch;
+            end
+        end
+        
+        local targetYawVel = -(10.0 * m.controller.stickX);
+
+        if (targetYawVel > 0) then
+            if (m.angleVel.y < 0) then
+                m.angleVel.y = m.angleVel.y + 0x40;
+                if (m.angleVel.y > 0x10) then
+                    m.angleVel.y = 0x10;
+                end
+            else
+                m.angleVel.y = approach_s32(m.angleVel.y, targetYawVel, 0x10, 0x20);
+            end
+        elseif (targetYawVel < 0) then
+            if (m.angleVel.y > 0) then
+                m.angleVel.y = m.angleVel.y - 0x40;
+                if (m.angleVel.y < -0x10) then
+                    m.angleVel.y = -0x10;
+                end
+            else
+                m.angleVel.y = approach_s32(m.angleVel.y, targetYawVel, 0x20, 0x10);
+            end
+        else
+            m.angleVel.y = approach_s32(m.angleVel.y, 0, 0x40, 0x40);
+        end
+
+        m.faceAngle.y = m.faceAngle.y + m.angleVel.y;
+        m.faceAngle.z = -m.angleVel.y * 8;
+
+        m.vel.x = m.forwardVel * sins(m.faceAngle.y) * coss(m.faceAngle.x)
+        m.vel.y = m.forwardVel * sins(m.faceAngle.x)
+        m.vel.z = m.forwardVel * coss(m.faceAngle.y) * coss(m.faceAngle.x)
+
+        local movement = perform_water_step(m)
+
+        function bonk()
+            mario_set_forward_vel(m,-20)
+            set_mario_action(m,ACT_BACKWARD_WATER_KB,0)
+            stop_sounds_from_source(m.marioObj.header.gfx.cameraToObject)
+            m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
+            play_mario_sound(m, 0, CHAR_SOUND_UH)
+        end
+
+        if movement == WATER_STEP_HIT_FLOOR then
+            floorPitch = -find_floor_slope(m, -0x8000);
+            if (m.faceAngle.x < floorPitch) then
+                m.faceAngle.x = floorPitch
+            end
+            if m.forwardVel > 40 then --Needs a better way to check wall hit
+                bonk()
+            end
+        elseif movement == WATER_STEP_HIT_CEILING then
+            if (m.faceAngle.x > -0x3000) then
+                m.faceAngle.x = m.faceAngle - 0x100
+            end
+            if m.forwardVel > 40 then --Needs a better way to check wall hit
+                bonk()
+            end
+        elseif movement == WATER_STEP_HIT_WALL then
+            if (m.controller.stickY == 0.0) then
+                if (m.faceAngle.x > 0.0) then
+                    m.faceAngle.x = m.faceAngle.x + 0x200
+                    if (m.faceAngle.x > 0x3F00) then
+                        m.faceAngle.x = 0x3F00
+                    end
+                else
+                    m.faceAngle.x = m.faceAngle.x - 0x200;
+                    if (m.faceAngle.x < -0x3F00) then
+                        m.faceAngle.x = -0x3F00;
+                    end
+                end
+            end
+            if m.forwardVel > 40 then --Needs a better way to check wall hit
+                bonk()
+            end
+        end
+
+        mario_set_forward_vel(m,m.forwardVel-1)
+    end
+
+    local spin = 0x10000 * e.spinSpeed
+
+    m.marioObj.header.gfx.angle.x = -m.faceAngle.x + 0x3F00
+    m.marioObj.header.gfx.angle.y = m.faceAngle.y
+    m.marioObj.header.gfx.angle.z = m.faceAngle.z
+    
+    m.actionTimer = m.actionTimer + 1
 end
 
 local function act_spin_jump(m)--GALAXY SPIN / SPIN JUMP
@@ -500,9 +650,13 @@ local function mario_update(m)
         set_mario_action(m, ACT_GROUND_POUND, 0)
     end
 
+    print(m.action)
     --GALAXY SPIN / SPIN JUMP
     if SPINACTIONS[m.action] and ((m.controller.buttonPressed & X_BUTTON) ~= 0) then
-        if not e.didSpin then 
+        if WATERACTIONS[m.action] then
+            set_mario_action(m, ACT_WATER_SPIN, 0)
+            play_sound_with_freq_scale(SOUND_MENU_COLLECT_SECRET, m.marioObj.header.gfx.cameraToObject, 1.75)
+        elseif not e.didSpin then 
             if m.action == ACT_IDLE or m.action == ACT_WALKING then
                 m.vel.y = 25
                 fromGround = true
@@ -549,7 +703,6 @@ local function mario_update(m)
         e.didAirDash = true
     end
 
-    --play_sound_with_freq_scale(SOUND_ACTION_SWIM_FAST, m.marioObj.header.gfx.cameraToObject, 1.75) Saving this for Galaxy Spin in the water
 
     if m.pos then
         e.lastPos.x = m.pos.x
@@ -634,6 +787,7 @@ hook_mario_action(ACT_GROUND_POUND_JUMP, { every_frame = act_ground_pound_jump }
 hook_mario_action(ACT_WALL_SLIDE, { every_frame = act_wall_slide, gravity = act_wall_slide_gravity })
 hook_mario_action(ACT_ROLL, { every_frame = act_roll}, INT_TRIP)
 hook_mario_action(ACT_AIR_DASH, { every_frame = act_air_dash}, INT_SLIDE_KICK)
+hook_mario_action(ACT_WATER_SPIN, { every_frame = act_water_spin}, INT_FAST_ATTACK_OR_SHELL)
 hook_mario_action(ACT_CUSTOM_AIR_HIT_WALL, { every_frame = act_air_hit_wall })
 
 --hook_chat_command("inputs", "- Moveset Info", inputs_command)
