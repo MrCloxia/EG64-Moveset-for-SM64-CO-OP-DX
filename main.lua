@@ -298,9 +298,12 @@ local function act_air_dash(m)--AIR DASH
     local stepResult = perform_air_step(m, 0)
 
     if m.actionTimer == 0 then
-        mario_set_forward_vel(m, 65)
+        mario_set_forward_vel(m, math.max(64,m.forwardVel))
     else
         mario_set_forward_vel(m, math.max(m.forwardVel - 4, 5))
+        if m.forwardVel <= 5 then
+            set_mario_action(m, ACT_FREEFALL, 0)
+        end
     end
     m.vel.y = -5
     set_mario_particle_flags(m, PARTICLE_DUST, 0)
