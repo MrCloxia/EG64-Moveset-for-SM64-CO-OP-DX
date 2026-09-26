@@ -17,12 +17,12 @@ local math_floor = math.floor
 -------------------------------
 
 ACT_FAKE_FREEFALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
-ACT_GROUND_POUND_JUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_SPIN_JUMP = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_WALL_SLIDE = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_MOVING | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_ROLL = allocate_mario_action(ACT_GROUP_MOVING)
 ACT_AIR_DASH = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_WATER_SPIN = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
+ACT_WATER_GROUND_POUND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 
 local PACKET_MOVESET = 100
@@ -43,7 +43,6 @@ local SPINACTIONS = {
     [ACT_LONG_JUMP] = true,
     [ACT_SIDE_FLIP] = true,
     [ACT_FLUTTER_KICK] = true,
-    [ACT_GROUND_POUND_JUMP] = true,
     [ACT_DIVE] = true,
     [ACT_FORWARD_ROLLOUT] = true,
     [ACT_BACKWARD_ROLLOUT] = true,
@@ -51,31 +50,21 @@ local SPINACTIONS = {
     [ACT_BACKFLIP] = true,
     [ACT_FREEFALL] = true,
     [ACT_FLYING] = true,
-    [ACT_WATER_JUMP] = true,
-    
-    [ACT_BREASTSTROKE] = true,
-    [ACT_HOLD_BREASTSTROKE] = true,
-    [ACT_WATER_PUNCH] = true,
-    [ACT_WATER_IDLE] = true,
-    [ACT_WATER_PLUNGE] = true,
-    [ACT_HOLD_SWIMMING_END] = true,
-    [ACT_WATER_ACTION_END] = true,
-    [ACT_HOLD_WATER_IDLE] = true,
-    [ACT_HOLD_WATER_ACTION_END] = true
+    [ACT_WATER_JUMP] = true
 }
 
 local fromGround = false
 
 local WATERACTIONS = {
+    [ACT_WATER_IDLE] = true,
+    [ACT_WATER_PUNCH] = true,
+    [ACT_WATER_PLUNGE] = true,
     [ACT_BREASTSTROKE] = true,
     [ACT_HOLD_BREASTSTROKE] = true,
-    [ACT_WATER_PUNCH] = true,
-    [ACT_WATER_IDLE] = true,
-    [ACT_WATER_PLUNGE] = true,
-    [ACT_HOLD_SWIMMING_END] = true,
     [ACT_WATER_ACTION_END] = true,
     [ACT_HOLD_WATER_IDLE] = true,
-    [ACT_HOLD_WATER_ACTION_END] = true
+    [ACT_HOLD_WATER_ACTION_END] = true,
+    [ACT_HOLD_SWIMMING_END] = true
 }
 
 local AIRDASHACTIONS = {
@@ -84,6 +73,7 @@ local AIRDASHACTIONS = {
     [ACT_TRIPLE_JUMP] = true,
     [ACT_LONG_JUMP] = true,
     [ACT_DIVE] = true,
+    [ACT_FREEFALL] = true,
     [ACT_SPIN_JUMP] = true
 }
 
@@ -359,9 +349,9 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
 
     e.swimSpinAngle = e.swimSpinAngle + (0x10000 * e.spinSpeed)
 
-    m.marioObj.header.gfx.angle.x = 0x8000 + e.swimSpinAngle
+    m.marioObj.header.gfx.angle.x = 0x8000 + e.swimSpinAngle--Spins correctly but doesn't go up or down at the momment.
     m.marioObj.header.gfx.angle.y = m.faceAngle.y + 0x4000
-    m.marioObj.header.gfx.angle.z = -m.faceAngle.z + 0x3F00 --+ m.faceAngle.x
+    m.marioObj.header.gfx.angle.z = -m.faceAngle.z + 0x3F00
     
     m.actionTimer = m.actionTimer + 1
 end
@@ -480,11 +470,12 @@ local function act_air_dash(m)--AIR DASH
     end
 end
 
---------------------------------------
--- --------- Wall Slide ----------
---------------------------------------
+local function act_water_ground_pound(m)--Not too sure what I'm doing yet.
+    set_mario_animation(m, CHAR_ANIM_GROUND_POUND)
+    m.actionTimer = m.actionTimer + 1
+end
 
-function act_wall_slide(m)
+function act_wall_slide(m)--WALL SLIDE
     if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then return 0 end
     local e = gMarioStateExtras[m.playerIndex]
     e.savedWallSlideHeight = m.pos.y
@@ -559,31 +550,13 @@ end
 
 local convert_actions = {
     [ACT_AIR_HIT_WALL] = ACT_CUSTOM_AIR_HIT_WALL,
-    [ACT_SLIDE_KICK] = ACT_ROLL
+    [ACT_SLIDE_KICK] = ACT_ROLL,
+    [ACT_WATER_PUNCH] = ACT_WATER_SPIN
 }
 
 local function before_set_mario_action(m, action)
     if gGlobalSyncTable.movesetEnabled == false then return action end
     return convert_actions[action] ~= nil and convert_actions[action] or action
-end
-
-local function act_ground_pound_jump(m)
-    play_mario_sound(m, SOUND_ACTION_TERRAIN_JUMP, CHAR_SOUND_YAHOO)
-
-    -- Ground Pound With Z
-    if (m.controller.buttonPressed & Z_TRIG) ~= 0 then
-        return set_mario_action(m, ACT_GROUND_POUND, 0)
-    end
-
-    -- Now not disabled Input B
-    if (m.input & INPUT_B_PRESSED) ~= 0 then
-        mario_set_forward_vel(m, math.max(m.forwardVel, 20.0))
-        return set_mario_action(m, ACT_DIVE, 0)
-    end
-
-    common_air_action_step(m, ACT_TRIPLE_JUMP_LAND, MARIO_ANIM_TRIPLE_JUMP, 0)
-    m.actionTimer = m.actionTimer + 1
-    return 0
 end
 
 local function mario_on_set_action(m)
@@ -601,9 +574,7 @@ local function mario_on_set_action(m)
         dashPressy = 0
     end
 
-    if m.action == ACT_GROUND_POUND_JUMP then
-        m.vel.y = 65.0
-    elseif m.action == ACT_WALL_SLIDE then
+    if m.action == ACT_WALL_SLIDE then
         m.vel.y = 0.0
     elseif m.action == ACT_GROUND_POUND and m.prevAction == ACT_SIDE_FLIP then
         m.marioObj.header.gfx.angle.y = limit_angle(m.marioObj.header.gfx.angle.y - 0x8000)
@@ -630,7 +601,7 @@ local function mario_update(m)
     if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then return end
 
     if gGlobalSyncTable.movesetEnabled == false then 
-        if m.action == ACT_SPIN_JUMP or m.action == ACT_WALL_SLIDE or m.action == ACT_GROUND_POUND_JUMP then
+        if m.action == ACT_SPIN_JUMP or m.action == ACT_WALL_SLIDE then
             set_mario_action(m, ACT_FREEFALL, 0)
         end
         return 
@@ -644,6 +615,11 @@ local function mario_update(m)
         e.groundPoundCooldown = e.groundPoundCooldown - 1
     end
 
+    --LONG JUMP GROUND POUND
+    if m.action == ACT_LONG_JUMP and (m.input & INPUT_Z_PRESSED) ~= 0 then
+        set_mario_action(m, ACT_GROUND_POUND, 0)
+    end
+
     --AIR DIVE
     if m.action == ACT_GROUND_POUND and (m.input & INPUT_B_PRESSED) ~= 0 then
         mario_set_forward_vel(m, 22.2)
@@ -653,41 +629,33 @@ local function mario_update(m)
         play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
     end
 
-    --LONG JUMP GROUNDPOUND
-    if m.action == ACT_LONG_JUMP and (m.input & INPUT_Z_PRESSED) ~= 0 then
-        set_mario_action(m, ACT_GROUND_POUND, 0)
+    --GROUND POUND JUMP
+    if m.action == ACT_GROUND_POUND_LAND and (m.input & INPUT_A_PRESSED) ~= 0 then
+        if e.groundPoundCooldown <= 0 then
+            set_mario_action(m, ACT_TRIPLE_JUMP, 0)
+            m.faceAngle.y = m.intendedYaw
+            m.vel.y = 70.0
+            e.groundPoundCooldown = 0
+        end
     end
 
     print(m.action)
     --GALAXY SPIN / SPIN JUMP
     if SPINACTIONS[m.action] and ((m.controller.buttonPressed & X_BUTTON) ~= 0) then
-        if WATERACTIONS[m.action] then
-            set_mario_action(m, ACT_WATER_SPIN, 0)
-            play_sound_with_freq_scale(SOUND_MENU_COLLECT_SECRET, m.marioObj.header.gfx.cameraToObject, 1.75)
-        elseif not e.didSpin then 
+        if not e.didSpin then 
             if m.action == ACT_IDLE or m.action == ACT_WALKING then
                 m.vel.y = 25
                 fromGround = true
             else
                 m.vel.y = 50
             end
-            set_mario_action(m, ACT_SPIN_JUMP, 1)
             play_sound_with_freq_scale(SOUND_MENU_COLLECT_SECRET, m.marioObj.header.gfx.cameraToObject, 1.75)
+            set_mario_action(m, ACT_SPIN_JUMP, 1)
             selVoice = math.random(1,2)
             play_mario_sound(m, SOUND_ACTION_TWIRL, (selVoice == 1 and CHAR_SOUND_PUNCH_HOO or CHAR_SOUND_HOOHOO))
             m.faceAngle.y = m.intendedYaw
             e.spinInput = 0
             e.didSpin = true
-        end
-    end
-
-    --GROUND POUND JUMP
-    if m.action == ACT_GROUND_POUND_LAND and (m.input & INPUT_A_PRESSED) ~= 0 then
-        if e.groundPoundCooldown <= 0 then
-            set_mario_action(m, ACT_GROUND_POUND_JUMP, 0)
-            m.faceAngle.y = m.intendedYaw
-            m.vel.y = 70.0
-            e.groundPoundCooldown = 0
         end
     end
 
@@ -707,6 +675,17 @@ local function mario_update(m)
         end
     end
 
+    if WATERACTIONS[m.action] then
+        if (m.input & INPUT_Z_PRESSED) ~= 0 then--UNDERWATER GROUND POUND
+            --set_mario_action(m, ACT_WATER_GROUND_POUND, 0)
+        end
+    end
+
+    --DEBUG WATER
+    if (m.controller.buttonPressed & Y_BUTTON) ~= 0 then
+        --set_water_level(0, 10000, true)
+    end
+
 
     if m.pos then
         e.lastPos.x = m.pos.x
@@ -714,7 +693,6 @@ local function mario_update(m)
         e.lastPos.z = m.pos.z
     end
 end
-
 
 ------------------------------------------------------
 -- -------------- Commands ----------------------
@@ -787,11 +765,11 @@ hook_event(HOOK_BEFORE_SET_MARIO_ACTION, before_set_mario_action)
 
 hook_mario_action(ACT_FAKE_FREEFALL, { every_frame = act_fake_freefall })
 hook_mario_action(ACT_SPIN_JUMP, { every_frame = act_spin_jump }, INT_KICK)
-hook_mario_action(ACT_GROUND_POUND_JUMP, { every_frame = act_ground_pound_jump })
 hook_mario_action(ACT_WALL_SLIDE, { every_frame = act_wall_slide, gravity = act_wall_slide_gravity })
 hook_mario_action(ACT_ROLL, { every_frame = act_roll}, INT_TRIP)
 hook_mario_action(ACT_AIR_DASH, { every_frame = act_air_dash}, INT_SLIDE_KICK)
 hook_mario_action(ACT_WATER_SPIN, { every_frame = act_water_spin}, INT_FAST_ATTACK_OR_SHELL)
+hook_mario_action(ACT_WATER_GROUND_POUND, { every_frame = act_water_ground_pound }, INT_GROUND_POUND)
 hook_mario_action(ACT_CUSTOM_AIR_HIT_WALL, { every_frame = act_air_hit_wall })
 
 --hook_chat_command("inputs", "- Moveset Info", inputs_command)
