@@ -63,6 +63,9 @@ local SPINACTIONS = {
     [ACT_HOLD_WATER_IDLE] = true,
     [ACT_HOLD_WATER_ACTION_END] = true
 }
+
+local fromGround = false
+
 local WATERACTIONS = {
     [ACT_BREASTSTROKE] = true,
     [ACT_HOLD_BREASTSTROKE] = true,
@@ -74,15 +77,17 @@ local WATERACTIONS = {
     [ACT_HOLD_WATER_IDLE] = true,
     [ACT_HOLD_WATER_ACTION_END] = true
 }
-local fromGround = false
 
-local ANTIDASHACTIONS = {
-    [ACT_WALL_KICK_AIR] = true,
-    [ACT_GROUND_POUND] = true,
-    [ACT_FREEFALL] = true
+local AIRDASHACTIONS = {
+    [ACT_JUMP] = true,
+    [ACT_DOUBLE_JUMP] = true,
+    [ACT_TRIPLE_JUMP] = true,
+    [ACT_LONG_JUMP] = true,
+    [ACT_DIVE] = true,
+    [ACT_SPIN_JUMP] = true
 }
 
-local dashPressy = 0
+local dashPress = 0
 
 local gMarioStateExtras = {}
 
@@ -126,6 +131,7 @@ for i = 0, (MAX_PLAYERS - 1) do
     e.groundPoundCooldown = 0
     e.didSpin = false
     e.didAirDash = false
+    e.swimSpinAngle = 0
 end
 
 local function limit_angle(a)
@@ -309,7 +315,9 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
             set_mario_action(m,ACT_BACKWARD_WATER_KB,0)
             stop_sounds_from_source(m.marioObj.header.gfx.cameraToObject)
             m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
-            play_mario_sound(m, 0, CHAR_SOUND_UH)
+            m.flags = m.flags & ~MARIO_ACTION_SOUND_PLAYED
+            play_sound_with_freq_scale(SOUND_GENERAL_MOVING_WATER, m.marioObj.header.gfx.cameraToObject, 0.85)
+            play_mario_sound(m, 0, CHAR_SOUND_OOOF2)
         end
 
         if movement == WATER_STEP_HIT_FLOOR then
@@ -322,7 +330,7 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
             end
         elseif movement == WATER_STEP_HIT_CEILING then
             if (m.faceAngle.x > -0x3000) then
-                m.faceAngle.x = m.faceAngle - 0x100
+                m.faceAngle.x = m.faceAngle.x - 0x100
             end
             if m.forwardVel > 40 then --Needs a better way to check wall hit
                 bonk()
@@ -349,11 +357,11 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
         mario_set_forward_vel(m,m.forwardVel-1)
     end
 
-    local spin = 0x10000 * e.spinSpeed
+    e.swimSpinAngle = e.swimSpinAngle + (0x10000 * e.spinSpeed)
 
-    m.marioObj.header.gfx.angle.x = -m.faceAngle.x + 0x3F00
-    m.marioObj.header.gfx.angle.y = m.faceAngle.y
-    m.marioObj.header.gfx.angle.z = m.faceAngle.z
+    m.marioObj.header.gfx.angle.x = 0x8000 + e.swimSpinAngle
+    m.marioObj.header.gfx.angle.y = m.faceAngle.y + 0x4000
+    m.marioObj.header.gfx.angle.z = -m.faceAngle.z + 0x3F00 --+ m.faceAngle.x
     
     m.actionTimer = m.actionTimer + 1
 end
@@ -683,24 +691,20 @@ local function mario_update(m)
         end
     end
 
-    if not ANTIDASHACTIONS[m.action] then
+    --AIR DASH
+    if AIRDASHACTIONS[m.action] then
         if (m.input & INPUT_A_PRESSED) ~= 0 then
             if m.action & ACT_FLAG_AIR ~= 0 then
                 dashPressy = dashPressy + 1
             end
+        elseif (m.input & INPUT_A_DOWN) ~= 0 and not e.didAirDash and dashPressy >= 2 and m.forwardVel > 33 and m.vel.y < 10 then
+            m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
+            play_sound_with_freq_scale(SOUND_ACTION_FLYING_FAST, m.marioObj.header.gfx.cameraToObject, 2.45)
+            play_mario_sound(m, SOUND_ACTION_FLYING_FAST, CHAR_SOUND_YAHOO_WAHA_YIPPEE)
+            set_mario_action(m, ACT_AIR_DASH, 0)
+            m.faceAngle.y = m.intendedYaw
+            e.didAirDash = true
         end
-    else
-        dashPressy = 0
-    end
-
-    --AIR DASH
-    if not ANTIDASHACTIONS[m.action] and dashPressy >= 2 and not e.didAirDash and (m.input & INPUT_A_DOWN) ~= 0 and m.forwardVel > 33 then
-        m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
-        play_sound_with_freq_scale(SOUND_ACTION_FLYING_FAST, m.marioObj.header.gfx.cameraToObject, 2.45)
-        play_mario_sound(m, SOUND_ACTION_FLYING_FAST, CHAR_SOUND_YAHOO_WAHA_YIPPEE)
-        set_mario_action(m, ACT_AIR_DASH, 0)
-        m.faceAngle.y = m.intendedYaw
-        e.didAirDash = true
     end
 
 
