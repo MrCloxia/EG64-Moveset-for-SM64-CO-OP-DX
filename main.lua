@@ -1,6 +1,6 @@
--- name:\\#9457ff\\Elevator Movement 64
+-- name:\\#ffdd00\\Hybrid \\#ffa600\\Moveset
 -- incompatible: moveset
--- description:A moveset based on the "Super Mario 64 Land" Romhack which is excellent and features over 131 stars, It also contains 2 commands and a popup message (One for all and another for the host). the pop-up message made by \\#55a400\\Blither\\#8a1915\\Dev\\#dcdcdc\\, It is currently on version 2.21, And this is the final version of the moveset. One thing I want to say is that a large part of the code was done by ManIsCat2, Big credit to that person. The moveset includes: \n\n\\#fff305\\Spin Jump [X Button] \n\\#ff05ff\\Ground Pound Jump [A + Z + A] \n\\#00ff00\\Air Dive [Z + B] \n\\#0008f2\\Wall Slide \n\\#0785f2\\No Fall Damage. \n\n\\#dcdcdc\\The developer is:\n\\#ff5400\\MrCho\\#00ff00\\quin7 \n\\#b91c37\\River64\\#ff9000\\Espanol\\#545454\\! \\#dcdcdc\\(Beta Tester)
+-- description: Placeholder Description
 
 ------------------------------
 ----- Functions ---------
@@ -42,6 +42,7 @@ local SPINACTIONS = {
     [ACT_DOUBLE_JUMP] = true,
     [ACT_TRIPLE_JUMP] = true,
     [ACT_LONG_JUMP] = true,
+    [ACT_JUMP_KICK] = true,
     [ACT_SIDE_FLIP] = true,
     [ACT_FLUTTER_KICK] = true,
     [ACT_DIVE] = true,
@@ -335,14 +336,12 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
                 end
             end
 
-            mario_bonk_reflection(m, false)
+            local wallAngle = atan2s(m.wallNormal.z, m.wallNormal.x);
+            local dWallAngle = wallAngle - m.faceAngle.y;
 
-            -- local wallAngle = atan2s(m.wallNormal.z, m.wallNormal.x);
-            -- local dWallAngle = wallAngle - m.faceAngle.y;
-
-            -- if m.forwardVel > 30 and check_wall_kick(mjm) then --Needs a better way to check wall hit
-            --     bonk()
-            -- end
+            if m.forwardVel > 30 and check_wall_kick(mjm) then --Needs a better way to check wall hit
+                bonk()
+            end
         end
 
         mario_set_forward_vel(m,m.forwardVel-1)
@@ -456,15 +455,19 @@ local function act_air_dash(m)--AIR DASH
 
     if stepResult == AIR_STEP_HIT_WALL then
         stop_sounds_from_source(m.marioObj.header.gfx.cameraToObject)
-        play_sound(((m.flags & MARIO_METAL_CAP) ~= 0 and SOUND_ACTION_METAL_BONK or SOUND_ACTION_BONK), m.marioObj.header.gfx.cameraToObject)
-        set_mario_action(m, ACT_BACKWARD_AIR_KB, 0)
-        spawn_sync_object(id_bhvHorStarParticleSpawner, 0, m.pos.x,m.pos.y,m.pos.z,nil)
+        --play_sound(((m.flags & MARIO_METAL_CAP) ~= 0 and SOUND_ACTION_METAL_BONK or SOUND_ACTION_BONK), m.marioObj.header.gfx.cameraToObject)
+        --set_mario_action(m, ACT_BACKWARD_AIR_KB, 0)
+        --spawn_sync_object(id_bhvHorStarParticleSpawner, 0, m.pos.x, m.pos.y ,m.pos.z, nil)
     else
         if m.actionTimer >= 20 or (m.controller.buttonDown & A_BUTTON) == 0 then
             stop_sounds_from_source(m.marioObj.header.gfx.cameraToObject)
             set_mario_action(m, ACT_AIR_DASH_END, 0)
         end
         m.actionTimer = m.actionTimer + 1
+    end
+
+    if (m.input & INPUT_Z_PRESSED) ~= 0 then
+        set_mario_action(m, ACT_GROUND_POUND, 0)
     end
 end
 
@@ -481,13 +484,21 @@ local function act_air_dash_end(m)--AIR DASH END
                 dirDif = dirDif + 0x10000
             end
             if math.abs(dirDif) < 0x4000 then--Holding forward.
-                mario_set_forward_vel(m, m.forwardVel + 2)
+                mario_set_forward_vel(m, math.max(m.forwardVel, 20))
             elseif math.abs(dirDif) > 0x4000 then--Holding backward.
-                mario_set_forward_vel(m, math.max(m.forwardVel - 2, 0))
+                mario_set_forward_vel(m, math.max(m.forwardVel - 1, -2))
             end
         end
     elseif stepResult == AIR_STEP_LANDED then
         set_mario_action(m, ACT_FREEFALL_LAND, 0)
+    end
+
+    if stepResult == AIR_STEP_HIT_WALL and (m.input & INPUT_A_PRESSED) ~= 0 then
+        set_mario_action(m, ACT_AIR_HIT_WALL, 0)
+    end
+
+    if (m.input & INPUT_Z_PRESSED) ~= 0 then
+        set_mario_action(m, ACT_GROUND_POUND, 0)
     end
 end
 
@@ -676,11 +687,15 @@ local function mario_update(m)
 
     --AIR DASH
     if AIRDASHACTIONS[m.action] and not e.didAirDash and (m.input & INPUT_A_PRESSED) ~= 0 then
+        if m.forwardVel < 34 and m.vel.y <= 10 then
+            set_mario_action(m, ACT_JUMP_KICK, 0)
+        end
+
         if dashPressy < 1 then
             if m.action & ACT_FLAG_AIR ~= 0 then
                 dashPressy = dashPressy + 1
             end
-        elseif m.forwardVel > 33 and m.vel.y <= 10 then
+        elseif m.forwardVel > 34 and m.vel.y <= 10 then
             m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
             play_sound_with_freq_scale(SOUND_ACTION_FLYING_FAST, m.marioObj.header.gfx.cameraToObject, 2.45)
             play_mario_sound(m, SOUND_ACTION_FLYING_FAST, CHAR_SOUND_YAHOO_WAHA_YIPPEE)
@@ -747,9 +762,8 @@ local function toggle_moveset_command(msg)--Seems to trigger this for everyone e
 end
 
 local function inputs_command(msg)--Haven't change this, nor does it explain other movesets yet.
-    djui_chat_message_create("\\#00ff00\\English:")
-    djui_chat_message_create("X = Galaxy Spin, Z + B on ground = Roll, Z + B in mid-air = Air Dive, A + Z + A = Ground Pound Jump ||| No Fall Damage And Wall Slide")
-    return true -- = not mesagge global
+    djui_chat_message_create("\\#b7ffa1\\Ground Moveset:\n\\#ffbb80\\(X)\\#ffffff\\ - Galaxy Spin | \\#ff7a7a\\(A)\\#d1e3ff\\ in mid-air\\#ffffff\\ - Air Dash\n\\#c0abff\\(Z) \\#ffdd00\\+ \\#7591ff\\(B)\\#ffffff\\ - Roll | \\#c0abff\\(Z) \\#ffdd00\\+ \\#7591ff\\(B)\\#d1e3ff\\ in mid-air\\#ffffff\\ - Air Dive\n\\#c0abff\\(Z) \\#ffdd00\\+ \\#ff7a7a\\(A)\\#ffffff\\ - Ground Pound Jump\n\n\\#b5edff\\Water Moveset:\n\\#7591ff\\(B)\\#ffffff\\ - Galaxy Swim")
+    return true-- = not mesagge global
 end
 
 ---------------------- POP-UP ------------------------
@@ -758,13 +772,8 @@ local shownOnce = false
 
 hook_event(HOOK_ON_PLAYER_CONNECTED, function(p)
     if shownOnce then return end
-
     shownOnce = true
-
-    djui_popup_create(
-        "\n Elevator Movement 64 created by:\n\\#ff91ca\\Sibottle\n\\#46ff40\\MrCloxia \n\n\\#dcdcdc\\If you want to know more about the moveset, write: \n/inputs",
-        6
-    )
+    djui_popup_create("\n\\#ffdd00\\Hybrid \\#ffa600\\Moveset\n\\#ffffff\\created by:\n\\#ff91ca\\Sibottle\\#ffffff\\ and \\#46ff40\\MrCloxia\n\n\\#ffffff\\Type \\#ffc75e\\'/inputs'\\#ffffff\\ to know more about the moveset.", 5)
 end)
 
 ---------------
