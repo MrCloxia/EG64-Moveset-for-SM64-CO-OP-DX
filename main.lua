@@ -687,7 +687,9 @@ local function mario_update(m)
 
     --AIR DASH
     if AIRDASHACTIONS[m.action] and not e.didAirDash and (m.input & INPUT_A_PRESSED) ~= 0 then
-        if m.forwardVel < 34 and m.vel.y <= 10 then
+        if m.forwardVel < 35 and m.vel.y <= 10 then
+            m.faceAngle.y = m.intendedYaw
+            mario_set_forward_vel(m, m.forwardVel * 1.35)
             set_mario_action(m, ACT_JUMP_KICK, 0)
         end
 
@@ -695,7 +697,7 @@ local function mario_update(m)
             if m.action & ACT_FLAG_AIR ~= 0 then
                 dashPressy = dashPressy + 1
             end
-        elseif m.forwardVel > 34 and m.vel.y <= 10 then
+        elseif m.forwardVel > 35 and m.vel.y <= 10 then
             m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
             play_sound_with_freq_scale(SOUND_ACTION_FLYING_FAST, m.marioObj.header.gfx.cameraToObject, 2.45)
             play_mario_sound(m, SOUND_ACTION_FLYING_FAST, CHAR_SOUND_YAHOO_WAHA_YIPPEE)
