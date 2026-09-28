@@ -316,15 +316,9 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
             if (m.faceAngle.x < floorPitch) then
                 m.faceAngle.x = floorPitch
             end
-            if m.forwardVel > 40 then --Needs a better way to check wall hit
-                bonk()
-            end
         elseif movement == WATER_STEP_HIT_CEILING then
             if (m.faceAngle.x > -0x3000) then
                 m.faceAngle.x = m.faceAngle.x - 0x100
-            end
-            if m.forwardVel > 40 then --Needs a better way to check wall hit
-                bonk()
             end
         elseif movement == WATER_STEP_HIT_WALL then
             if (m.controller.stickY == 0.0) then
@@ -340,9 +334,15 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
                     end
                 end
             end
-            if m.forwardVel > 40 then --Needs a better way to check wall hit
-                bonk()
-            end
+
+            mario_bonk_reflection(m, false)
+
+            -- local wallAngle = atan2s(m.wallNormal.z, m.wallNormal.x);
+            -- local dWallAngle = wallAngle - m.faceAngle.y;
+
+            -- if m.forwardVel > 30 and check_wall_kick(mjm) then --Needs a better way to check wall hit
+            --     bonk()
+            -- end
         end
 
         mario_set_forward_vel(m,m.forwardVel-1)
@@ -424,11 +424,8 @@ function act_roll(m)--ROLL (ELEVATOR GAME 64's ROLL)
 
     if (m.input & INPUT_B_PRESSED) ~= 0 then
         spawn_sync_object(id_bhvHorStarParticleSpawner, 0, m.pos.x,m.pos.y,m.pos.z,nil)
-        mario_set_forward_vel(m, m.forwardVel + 30)
+        mario_set_forward_vel(m, math.min(120,m.forwardVel + 30))
         play_sound(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject)
-        if (m.forwardVel > 120) then
-            mario_set_forward_vel(m, 120)
-        end
     else
         mario_set_forward_vel(m, m.forwardVel - 0.5)
     end
@@ -499,6 +496,8 @@ local function act_water_ground_pound(m)--Not too sure what I'm doing yet.
     m.actionTimer = m.actionTimer + 1
 end
 
+local stored_wall_speed = 0.0
+
 function act_wall_slide(m)--WALL SLIDE
     if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then return 0 end
     local e = gMarioStateExtras[m.playerIndex]
@@ -507,13 +506,16 @@ function act_wall_slide(m)--WALL SLIDE
 
     if m.actionTimer == 0 then
         e.animFrame = 0
+        stored_wall_speed = m.forwardVel
     end
 
     if (m.input & INPUT_A_PRESSED) ~= 0 then
         m.vel.y = 52.0
+        mario_set_forward_vel(m, stored_wall_speed)
         return set_mario_action(m, ACT_WALL_KICK_AIR, 0)
     end
 
+    stored_wall_speed = math.max(-1,stored_wall_speed - 5)
     mario_set_forward_vel(m, -1)
     m.particleFlags = m.particleFlags | PARTICLE_DUST
 
