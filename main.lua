@@ -26,6 +26,8 @@ ACT_WATER_SPIN = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_WATER_GROUND_POUND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 
+--gLevelValues.entryLevel = LEVEL_SL--LEVEL START DEBUG
+
 local PACKET_MOVESET = 100
 
 -----------------------------------
@@ -418,15 +420,15 @@ local function act_spin_jump(m)--GALAXY SPIN / SPIN JUMP
 end
 
 function act_roll(m)--ROLL (ELEVATOR GAME 64's ROLL)
-    common_slide_action_with_jump(m,ACT_WALKING,ACT_LONG_JUMP,ACT_FREEFALL,CHAR_ANIM_FORWARD_SPINNING)
-    mario_set_forward_vel(m, m.forwardVel * 1.05)
+    common_slide_action_with_jump(m, ACT_WALKING, ACT_LONG_JUMP, ACT_FREEFALL, CHAR_ANIM_FORWARD_SPINNING)
+    if m.forwardVel < 5 then
+        mario_set_forward_vel(m, math.max(m.forwardVel * 0.5, 30))
+    end
 
     if (m.input & INPUT_B_PRESSED) ~= 0 then
         spawn_sync_object(id_bhvHorStarParticleSpawner, 0, m.pos.x,m.pos.y,m.pos.z,nil)
-        mario_set_forward_vel(m, math.min(120,m.forwardVel + 30))
+        mario_set_forward_vel(m, math.max(math.min(120, m.forwardVel + 30), 30))
         play_sound(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject)
-    else
-        mario_set_forward_vel(m, m.forwardVel - 0.5)
     end
 
     if (m.forwardVel < 10) then
@@ -608,7 +610,7 @@ local function mario_on_set_action(m)
     elseif m.action == ACT_LEDGE_GRAB then
         e.rotAngle = m.forwardVel
     elseif m.action == ACT_ROLL then
-        mario_set_forward_vel(m, 22.2)
+        mario_set_forward_vel(m, math.max(m.forwardVel * 1.05, 30))
     end
 end
 
@@ -763,7 +765,7 @@ local function toggle_moveset_command(msg)--Seems to trigger this for everyone e
     return true
 end
 
-local function inputs_command(msg)--Haven't change this, nor does it explain other movesets yet.
+local function inputs_command(msg)
     djui_chat_message_create("\\#b7ffa1\\Ground Moveset:\n\\#ffbb80\\(X)\\#ffffff\\ - Galaxy Spin | \\#ff7a7a\\(A)\\#d1e3ff\\ in mid-air\\#ffffff\\ - Air Dash\n\\#c0abff\\(Z) \\#ffdd00\\+ \\#7591ff\\(B)\\#ffffff\\ - Roll | \\#c0abff\\(Z) \\#ffdd00\\+ \\#7591ff\\(B)\\#d1e3ff\\ in mid-air\\#ffffff\\ - Air Dive\n\\#c0abff\\(Z) \\#ffdd00\\+ \\#ff7a7a\\(A)\\#ffffff\\ - Ground Pound Jump\n\n\\#b5edff\\Water Moveset:\n\\#7591ff\\(B)\\#ffffff\\ - Galaxy Swim")
     return true-- = not mesagge global
 end
