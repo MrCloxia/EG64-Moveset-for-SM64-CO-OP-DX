@@ -22,6 +22,7 @@ ACT_WALL_SLIDE = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_F
 ACT_ROLL = allocate_mario_action(ACT_GROUP_MOVING)
 ACT_AIR_DASH = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_AIR_DASH_END = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
+ACT_DOLPHIN_DIVE = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_WATER_SPIN = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_WATER_GROUND_POUND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
@@ -345,6 +346,21 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
         end
 
         mario_set_forward_vel(m,m.forwardVel-1)
+
+        
+        local probe = m.pos.y + 1.5;
+
+        if (probe >= m.waterLevel - 80) then
+            set_mario_action(m, ACT_DOLPHIN_DIVE, 0)
+            m.vel.y = m.forwardVel
+            play_sound_with_freq_scale(SOUND_OBJ_DIVING_INTO_WATER, m.marioObj.header.gfx.cameraToObject, 0.8)
+            set_mario_particle_flags(m, PARTICLE_WATER_SPLASH, 0)
+            if m.forwardVel > 40 then
+                play_mario_sound(m, SOUND_ACTION_SWIM_FAST, CHAR_SOUND_YAHOO_WAHA_YIPPEE)
+            else
+                play_mario_sound(m, SOUND_ACTION_SWIM_FAST, CHAR_SOUND_HOOHOO)
+            end
+        end
     end
 
     e.swimSpinAngle = e.swimSpinAngle + (0x10000 * e.spinSpeed)
@@ -354,6 +370,36 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
     m.marioObj.header.gfx.angle.z = -m.faceAngle.z + 0x3F00
     
     m.actionTimer = m.actionTimer + 1
+end
+
+local function act_dolphin_dive(m)
+    common_air_action_step(m, ACT_FREEFALL, CHAR_ANIM_DIVE, AIR_STEP_CHECK_LEDGE_GRAB | AIR_STEP_CHECK_HANG)
+    local stepResult = perform_air_step(m, 0)
+
+    if m.actionTimer < 10 then
+        set_mario_particle_flags(m,PARTICLE_SPARKLES,0)
+    end
+
+    if stepResult == AIR_STEP_LANDED then
+        set_mario_action(m, ACT_DIVE_SLIDE, 0)
+    end
+
+    if (m.pos.y < m.waterLevel - 100) then
+        m.faceAngle.x = m.vel.y * 0x200
+        set_mario_action(m, ACT_SWIMMING_END, 0)
+    end
+
+    m.marioObj.header.gfx.angle.x = m.vel.y * -0x200
+
+
+    m.actionTimer = m.actionTimer + 1
+end
+
+local function act_dolphin_dive_gravity(m)
+    m.vel.y = m.vel.y - 1
+    if m.vel.y < -30 then
+        m.vel.y = -30
+    end
 end
 
 local function act_spin_jump(m)--GALAXY SPIN / SPIN JUMP
@@ -372,7 +418,7 @@ local function act_spin_jump(m)--GALAXY SPIN / SPIN JUMP
         if e.fromGround then
             e.fromGround = false
         else
-            set_mario_action(m, ACT_FREEFALL, 0)
+            set_mario_action(m, ACT_IDLE, 0)
         end
         return
     end
@@ -786,7 +832,14 @@ local function toggle_moveset_command(msg)--Seems to trigger this for everyone e
 end
 
 local function inputs_command(msg)
-    djui_chat_message_create("\\#b7ffa1\\Ground Moveset:\n\\#ffbb80\\(X)\\#ffffff\\ - Galaxy Spin | \\#ff7a7a\\(A)\\#d1e3ff\\ in mid-air\\#ffffff\\ - Air Dash\n\\#c0abff\\(Z) \\#ffdd00\\+ \\#7591ff\\(B)\\#ffffff\\ - Roll | \\#c0abff\\(Z) \\#ffdd00\\+ \\#7591ff\\(B)\\#d1e3ff\\ in mid-air\\#ffffff\\ - Air Dive\n\\#c0abff\\(Z) \\#ffdd00\\+ \\#ff7a7a\\(A)\\#ffffff\\ - Ground Pound Jump\n\n\\#b5edff\\Water Moveset:\n\\#7591ff\\(B)\\#ffffff\\ - Galaxy Swim")
+    djui_chat_message_create([[
+\#b7ffa1\Ground Moveset:
+\#ffbb80\(X)\#ffffff\ - Galaxy Spin | \#ff7a7a\(A)\#d1e3ff\ in mid-air\#ffffff\ - Air Dash
+\#c0abff\(Z)\#ffdd00\ + \#7591ff\(B)\#ffffff\ - Roll | \#c0abff\(Z)\#ffdd00\ + \#7591ff\(B)\#d1e3ff\ in mid-air\#ffffff\ - Air Dive
+\#c0abff\(Z)\#ffdd00\ + \#ff7a7a\(A)\#ffffff\ - Ground Pound Jump
+
+\#b5edff\Water Moveset:
+\#7591ff\(B)\#ffffff\ - Galaxy Swim | \#7591ff\(B)\#d1e3ff\ on water surface\#ffffff\ - Dolphin Dive]])
     return true-- = not mesagge global
 end
 
@@ -817,6 +870,7 @@ hook_mario_action(ACT_WALL_SLIDE, { every_frame = act_wall_slide, gravity = act_
 hook_mario_action(ACT_ROLL, { every_frame = act_roll}, INT_TRIP)
 hook_mario_action(ACT_AIR_DASH, { every_frame = act_air_dash}, INT_SLIDE_KICK)
 hook_mario_action(ACT_AIR_DASH_END, { every_frame = act_air_dash_end})
+hook_mario_action(ACT_DOLPHIN_DIVE, { every_frame = act_dolphin_dive, gravity = act_dolphin_dive_gravity}, INT_SLIDE_KICK)
 hook_mario_action(ACT_WATER_SPIN, { every_frame = act_water_spin}, INT_FAST_ATTACK_OR_SHELL)
 hook_mario_action(ACT_WATER_GROUND_POUND, { every_frame = act_water_ground_pound }, INT_GROUND_POUND)
 hook_mario_action(ACT_CUSTOM_AIR_HIT_WALL, { every_frame = act_air_hit_wall })
