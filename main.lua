@@ -26,7 +26,7 @@ ACT_WATER_SPIN = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_WATER_GROUND_POUND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 
---gLevelValues.entryLevel = LEVEL_SL--LEVEL START DEBUG
+-- gLevelValues.entryLevel = LEVEL_SL--LEVEL START DEBUG
 
 local PACKET_MOVESET = 100
 
@@ -58,8 +58,6 @@ local SPINACTIONS = {
     [ACT_AIR_DASH_END] = true,
     [ACT_BUTT_SLIDE_AIR] = true
 }
-
-local fromGround = false
 
 local WATERACTIONS = {
     [ACT_WATER_IDLE] = true,
@@ -233,6 +231,7 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
     if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then
         return false
     end
+    
     local e = gMarioStateExtras[m.playerIndex]
 
     m.marioBodyState.handState = MARIO_HAND_OPEN
@@ -367,23 +366,25 @@ local function act_spin_jump(m)--GALAXY SPIN / SPIN JUMP
     update_air_without_turn(m);
     local stepResult = perform_air_step(m, 0)
 
+    local e = gMarioStateExtras[m.playerIndex]
+    
     if stepResult == AIR_STEP_LANDED then
-        if fromGround then
-            fromGround = false
+        if e.fromGround then
+            e.fromGround = false
         else
             set_mario_action(m, ACT_FREEFALL, 0)
         end
         return
     end
 
-    local e = gMarioStateExtras[m.playerIndex]
 
     if m.actionTimer == 0 then
+        e.fromGround = true
         e.spinSpeed = 1
     end
 
     if e.spinSpeed > 0.02 then
-        if stepResult == AIR_STEP_HIT_WALL and not fromGround then
+        if stepResult == AIR_STEP_HIT_WALL and not e.fromGround then
             stop_sounds_from_source(m.marioObj.header.gfx.cameraToObject)
             mario_bonk_reflection(m, false)
             m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
@@ -420,8 +421,27 @@ end
 
 function act_roll(m)--ROLL (ELEVATOR GAME 64's ROLL)
     common_slide_action_with_jump(m, ACT_WALKING, ACT_LONG_JUMP, ACT_FREEFALL, CHAR_ANIM_FORWARD_SPINNING)
-    if m.forwardVel < 5 then
-        mario_set_forward_vel(m, math.max(m.forwardVel * 0.5, 30))
+
+    local intendedDYaw = m.intendedYaw - m.slideYaw;
+    local forward = coss(intendedDYaw);
+    if (forward < 0.0 and m.forwardVel >= 0.0) then
+        forward = forward * (0.5 + 0.5 * m.forwardVel / 100.0)
+    end
+    
+    local floor_type = mario_get_floor_class(m)
+
+    if floor_type == SURFACE_CLASS_VERY_SLIPPERY then
+        accel = 10.0;
+        lossFactor = m.intendedMag / 32.0 * forward * 0.02 + 0.99;
+    elseif floor_type == SURFACE_CLASS_SLIPPERY then
+        accel = 8.0;
+        lossFactor = m.intendedMag / 32.0 * forward * 0.02 + 0.98;
+    elseif floor_type == SURFACE_CLASS_NOT_SLIPPERY then
+        accel = 5.0;
+        lossFactor = m.intendedMag / 32.0 * forward * 0.02 + 0.96;
+    else
+        accel = 7.0;
+        lossFactor = m.intendedMag / 32.0 * forward * 0.02 + 0.96;
     end
 
     if (m.input & INPUT_B_PRESSED) ~= 0 then
@@ -429,6 +449,8 @@ function act_roll(m)--ROLL (ELEVATOR GAME 64's ROLL)
         mario_set_forward_vel(m, math.max(math.min(120, m.forwardVel + 30), 30))
         play_sound(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject)
     end
+
+    mario_set_forward_vel(m, m.forwardVel + lossFactor / 2)
 
     if (m.forwardVel < 10) then
         if (m.forwardVel < 0) and AIR_STEP_HIT_WALL then
@@ -670,7 +692,7 @@ local function mario_update(m)
         if not e.didSpin then 
             if m.action == ACT_IDLE or m.action == ACT_WALKING then
                 m.vel.y = 25
-                fromGround = true
+                e.fromGround = true
             else
                 m.vel.y = 50
             end
