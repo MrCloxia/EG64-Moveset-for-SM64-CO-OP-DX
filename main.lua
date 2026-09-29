@@ -681,6 +681,7 @@ local function mario_update(m)
             set_mario_action(m, ACT_SPIN_JUMP, 1)
             selVoice = math.random(1, 2)
             play_mario_sound(m, SOUND_ACTION_TWIRL, (selVoice == 1 and CHAR_SOUND_PUNCH_HOO or CHAR_SOUND_HOOHOO))
+            mario_set_forward_vel(m,math.abs(m.forwardVel))
             m.faceAngle.y = m.intendedYaw
             e.spinInput = 0
             e.didSpin = true
