@@ -55,7 +55,8 @@ local SPINACTIONS = {
     [ACT_FREEFALL] = true,
     [ACT_FLYING] = true,
     [ACT_WATER_JUMP] = true,
-    [ACT_AIR_DASH_END] = true
+    [ACT_AIR_DASH_END] = true,
+    [ACT_BUTT_SLIDE_AIR] = true
 }
 
 local fromGround = false
@@ -82,8 +83,6 @@ local AIRDASHACTIONS = {
     [ACT_WALL_KICK_AIR] = true,
     [ACT_SPIN_JUMP] = true
 }
-
-local dashPress = 0
 
 local convert_actions = {
     [ACT_AIR_HIT_WALL] = ACT_CUSTOM_AIR_HIT_WALL,
@@ -509,8 +508,6 @@ local function act_water_ground_pound(m)--Not too sure what I'm doing yet.
     m.actionTimer = m.actionTimer + 1
 end
 
-local stored_wall_speed = 0.0
-
 function act_wall_slide(m)--WALL SLIDE
     if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then return 0 end
     local e = gMarioStateExtras[m.playerIndex]
@@ -519,16 +516,16 @@ function act_wall_slide(m)--WALL SLIDE
 
     if m.actionTimer == 0 then
         e.animFrame = 0
-        stored_wall_speed = m.forwardVel
+        e.stored_wall_speed = m.forwardVel
     end
 
     if (m.input & INPUT_A_PRESSED) ~= 0 then
         m.vel.y = 52.0
-        mario_set_forward_vel(m, stored_wall_speed)
+        mario_set_forward_vel(m, e.stored_wall_speed)
         return set_mario_action(m, ACT_WALL_KICK_AIR, 0)
     end
 
-    stored_wall_speed = math.max(-1,stored_wall_speed - 5)
+    e.stored_wall_speed = math.max(-1,e.stored_wall_speed - 5)
     mario_set_forward_vel(m, -1)
     m.particleFlags = m.particleFlags | PARTICLE_DUST
 
@@ -600,7 +597,7 @@ local function mario_on_set_action(m)
     if (m.action & ACT_FLAG_AIR) == 0 then
         e.didAirDash = false
         e.didSpin = false
-        dashPressy = 0
+        e.dashPress = 0
     end
 
     if m.action == ACT_WALL_SLIDE then
@@ -696,9 +693,9 @@ local function mario_update(m)
             set_mario_action(m, ACT_JUMP_KICK, 0)
         end
 
-        if dashPressy < 1 then
+        if e.dashPress < 1 then
             if m.action & ACT_FLAG_AIR ~= 0 then
-                dashPressy = dashPressy + 1
+                e.dashPress = e.dashPress + 1
             end
         elseif m.forwardVel > 35 and m.vel.y <= 10 then
             m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
