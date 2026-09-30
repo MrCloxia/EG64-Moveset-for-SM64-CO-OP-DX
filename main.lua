@@ -28,7 +28,7 @@ ACT_WATER_GROUND_POUND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SW
 ACT_WATER_GROUND_POUND_LAND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 
---gLevelValues.entryLevel = LEVEL_SA--LEVEL START DEBUG
+-- gLevelValues.entryLevel = LEVEL_SA--LEVEL START DEBUG
 
 local PACKET_MOVESET = 100
 
@@ -576,23 +576,27 @@ local function act_air_dash_end(m)--AIR DASH END
 end
 
 local function act_water_ground_pound(m)--WATER GROUND POUND
-    common_air_action_step(m, ACT_WATER_IDLE, CHAR_ANIM_GROUND_POUND, AIR_STEP_NONE)
-    m.faceAngle.z = 0
+
+    
     m.forwardVel = 0
     m.vel.x = 0
     m.vel.z = 0
+    m.faceAngle.z = 0
+
     if m.actionTimer == 0 then--Needs the spin during this, also you can move during this which isn't right.
         m.faceAngle.x = 0 
-        m.vel.y = 20
+        m.vel.y = 0
+        set_mario_animation(m,CHAR_ANIM_START_GROUND_POUND)
         play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
-    elseif m.actionTimer == 8 then
+    elseif m.actionTimer == 11 then
+        m.vel.y = -40
+        set_mario_animation(m,CHAR_ANIM_GROUND_POUND)
         play_mario_sound(m, 0, CHAR_SOUND_GROUND_POUND_WAH)
         play_sound_with_freq_scale(SOUND_GENERAL_MOVING_WATER, m.marioObj.header.gfx.cameraToObject, 2)
-    elseif m.actionTimer >= 11 then
-        m.vel.y = math.max(m.vel.y - 0.5, -20)
+    elseif m.actionTimer >= 13 then
         set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
     end
-    
+
     local waterResult = perform_water_step(m)
 
     if m.actionTimer > 30 then
