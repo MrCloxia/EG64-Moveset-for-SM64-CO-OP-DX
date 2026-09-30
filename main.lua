@@ -25,9 +25,10 @@ ACT_AIR_DASH_END = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT
 ACT_DOLPHIN_DIVE = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR | ACT_FLAG_ALLOW_VERTICAL_WIND_ACTION)
 ACT_WATER_SPIN = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_WATER_GROUND_POUND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
+ACT_WATER_GROUND_POUND_LAND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 
--- gLevelValues.entryLevel = LEVEL_SL--LEVEL START DEBUG
+--gLevelValues.entryLevel = LEVEL_SA--LEVEL START DEBUG
 
 local PACKET_MOVESET = 100
 
@@ -351,7 +352,7 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
         local probe = m.pos.y + 1.5;
 
         if (probe >= m.waterLevel - 80) then
-            set_mario_action(m, ACT_DOLPHIN_DIVE, 0)
+            set_mario_action(m, ACT_DOLPHIN_DIVE, 0)--DOLPHIN DIVE
             m.vel.y = m.forwardVel
             play_sound_with_freq_scale(SOUND_OBJ_DIVING_INTO_WATER, m.marioObj.header.gfx.cameraToObject, 0.8)
             set_mario_particle_flags(m, PARTICLE_WATER_SPLASH, 0)
@@ -372,12 +373,13 @@ local function act_water_spin(m)--GALAXY SWIM / SPIN SWIM
     m.actionTimer = m.actionTimer + 1
 end
 
-local function act_dolphin_dive(m)
+local function act_dolphin_dive(m)--DOLPHIN DIVE
     common_air_action_step(m, ACT_FREEFALL, CHAR_ANIM_DIVE, AIR_STEP_CHECK_LEDGE_GRAB | AIR_STEP_CHECK_HANG)
     local stepResult = perform_air_step(m, 0)
 
     if m.actionTimer < 10 then
-        set_mario_particle_flags(m,PARTICLE_SPARKLES,0)
+        set_mario_particle_flags(m, PARTICLE_SPARKLES, 0)
+        spawn_sync_object(id_bhvSnowParticleSpawner, 0, (m.pos.x + math.random(-30, 30)), (m.pos.y + math.random(-30, 30)), (m.pos.z + math.random(-30, 30)), nil)--Snow particles work as water droplets, ha ha.
     end
 
     if stepResult == AIR_STEP_LANDED then
@@ -386,6 +388,8 @@ local function act_dolphin_dive(m)
 
     if (m.pos.y < m.waterLevel - 100) then
         m.faceAngle.x = m.vel.y * 0x200
+        set_mario_particle_flags(m, PARTICLE_WATER_SPLASH, 0)
+        play_sound(SOUND_ACTION_UNKNOWN432, m.marioObj.header.gfx.cameraToObject)
         set_mario_action(m, ACT_SWIMMING_END, 0)
     end
 
@@ -491,7 +495,7 @@ function act_roll(m)--ROLL (ELEVATOR GAME 64's ROLL)
     end
 
     if (m.input & INPUT_B_PRESSED) ~= 0 then
-        spawn_sync_object(id_bhvHorStarParticleSpawner, 0, m.pos.x,m.pos.y,m.pos.z,nil)
+        spawn_sync_object(id_bhvHorStarParticleSpawner, 0, m.pos.x, m.pos.y, m.pos.z, nil)
         mario_set_forward_vel(m, math.max(math.min(120, m.forwardVel + 30), 30))
         play_sound(SOUND_ACTION_TWIRL, m.marioObj.header.gfx.cameraToObject)
     end
@@ -571,8 +575,48 @@ local function act_air_dash_end(m)--AIR DASH END
     end
 end
 
-local function act_water_ground_pound(m)--Not too sure what I'm doing yet.
-    set_mario_animation(m, CHAR_ANIM_GROUND_POUND)
+local function act_water_ground_pound(m)--WATER GROUND POUND
+    common_air_action_step(m, ACT_WATER_IDLE, CHAR_ANIM_GROUND_POUND, AIR_STEP_NONE)
+    m.faceAngle.z = 0
+    m.forwardVel = 0
+    m.vel.x = 0
+    m.vel.z = 0
+    if m.actionTimer == 0 then--Needs the spin during this, also you can move during this which isn't right.
+        m.faceAngle.x = 0 
+        m.vel.y = 20
+        play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
+    elseif m.actionTimer == 8 then
+        play_mario_sound(m, 0, CHAR_SOUND_GROUND_POUND_WAH)
+        play_sound_with_freq_scale(SOUND_GENERAL_MOVING_WATER, m.marioObj.header.gfx.cameraToObject, 2)
+    elseif m.actionTimer >= 11 then
+        m.vel.y = math.max(m.vel.y - 0.5, -20)
+        set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
+    end
+    
+    local waterResult = perform_water_step(m)
+
+    if m.actionTimer > 30 then
+        set_mario_action(m, ACT_WATER_IDLE, 0)
+    elseif waterResult == WATER_STEP_HIT_FLOOR then--Not consistent on hitting the ground.
+        play_sound(SOUND_ACTION_TERRAIN_HEAVY_LANDING, m.marioObj.header.gfx.cameraToObject)
+        spawn_sync_object(id_bhvHorStarParticleSpawner, 0, m.pos.x, m.pos.y, m.pos.z, nil)
+        set_mario_action(m, ACT_WATER_GROUND_POUND_LAND, 0)
+    end
+    
+    m.actionTimer = m.actionTimer + 1
+end
+
+local function act_water_ground_pound_land(m)--WATER GROUND POUND LAND
+    local waterResult = perform_water_step(m)
+
+    if waterResult == WATER_STEP_HIT_FLOOR then
+        set_mario_animation(m, CHAR_ANIM_STOP_SLIDE)
+    end
+
+    if m.actionTimer > 20 then
+        set_mario_action(m, ACT_WATER_IDLE, 0)
+    end
+
     m.actionTimer = m.actionTimer + 1
 end
 
@@ -776,8 +820,8 @@ local function mario_update(m)
     end
 
     if WATERACTIONS[m.action] then
-        if (m.input & INPUT_Z_PRESSED) ~= 0 then--UNDERWATER GROUND POUND
-            --set_mario_action(m, ACT_WATER_GROUND_POUND, 0)
+        if (m.input & INPUT_Z_PRESSED) ~= 0 and (m.pos.y - m.floorHeight) > 180 then--WATER GROUND POUND
+            set_mario_action(m, ACT_WATER_GROUND_POUND, 0)
         end
     end
 
@@ -785,7 +829,6 @@ local function mario_update(m)
     if (m.controller.buttonPressed & Y_BUTTON) ~= 0 then
         --set_water_level(0, 10000, true)
     end
-
 
     if m.pos then
         e.lastPos.x = m.pos.x
@@ -806,9 +849,9 @@ local function moveset_packet(data)--Haven't changed this yet.
     if data.type ~= PACKET_MOVESET then return end
 
     if data.enabled then
-        djui_chat_message_create("Moveset \\#ff5400\\64 \\#00ff00\\Land \\#00d2f2\\ON")
+        djui_chat_message_create("\\#ffdd00\\Hybrid \\#ffa600\\Moveset\\#ffffff\\: \\#b7ffa1\\ON")
     else
-        djui_chat_message_create("Moveset \\#ff5400\\64 \\#00ff00\\Land \\#ff0000\\OFF")
+        djui_chat_message_create("\\#ffdd00\\Hybrid \\#ffa600\\Moveset\\#ffffff\\: \\#ff7a7a\\OFF")
     end
 end
 
@@ -873,6 +916,7 @@ hook_mario_action(ACT_AIR_DASH_END, { every_frame = act_air_dash_end})
 hook_mario_action(ACT_DOLPHIN_DIVE, { every_frame = act_dolphin_dive, gravity = act_dolphin_dive_gravity}, INT_SLIDE_KICK)
 hook_mario_action(ACT_WATER_SPIN, { every_frame = act_water_spin}, INT_FAST_ATTACK_OR_SHELL)
 hook_mario_action(ACT_WATER_GROUND_POUND, { every_frame = act_water_ground_pound }, INT_GROUND_POUND)
+hook_mario_action(ACT_WATER_GROUND_POUND_LAND, { every_frame = act_water_ground_pound_land }, INT_GROUND_POUND)
 hook_mario_action(ACT_CUSTOM_AIR_HIT_WALL, { every_frame = act_air_hit_wall })
 
 hook_chat_command("inputs", "- Moveset Info", inputs_command)
