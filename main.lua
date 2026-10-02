@@ -30,8 +30,6 @@ ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AI
 
 -- gLevelValues.entryLevel = LEVEL_SA--LEVEL START DEBUG
 
-local PACKET_MOVESET = 100
-
 -----------------------------------
 ------------- Extra ------------
 ----------------------------------
@@ -96,6 +94,10 @@ for i = 0, (MAX_PLAYERS - 1) do
     gMarioStateExtras[i] = {}
     local m = gMarioStates[i]
     local e = gMarioStateExtras[i]
+    s = gPlayerSyncTable[i]
+
+    s.usingHybird = true
+
     e.angleDeltaQueue = {}
     for j = 0, (ANGLE_QUEUE_SIZE - 1) do e.angleDeltaQueue[j] = 0 end
     e.rotAngle = 0
@@ -135,19 +137,27 @@ for i = 0, (MAX_PLAYERS - 1) do
     e.swimSpinAngle = 0
 end
 
+local hybird_cmd = function(_, value)
+    gPlayerSyncTable[0].usingHybird = value
+end
+
 local function limit_angle(a)
     return (a + 0x8000) % 0x10000 - 0x8000
 end
 
 function no_fall_damage(m)
     if not m or m.playerIndex == nil then return end
-    if gGlobalSyncTable.movesetEnabled == false then return end
+    if not s.usingHybird then return end
     m.peakHeight = m.pos.y
 end
 
 local function mario_update_spin_input(m)
-    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then return end
-    if (m.action & ACT_FLAG_AIR) == 0 then return end
+    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then 
+        return 
+    end
+    if (m.action & ACT_FLAG_AIR) == 0 then 
+        return 
+    end
     local e = gMarioStateExtras[m.playerIndex]
     local rawAngle = atan2s(-m.controller.stickY, m.controller.stickX)
     e.spinInput = 0
@@ -689,13 +699,21 @@ local function act_air_hit_wall(m)
 end
 
 local function before_set_mario_action(m, action)
-    if gGlobalSyncTable.movesetEnabled == false then return action end
+    local s = gPlayerSyncTable[m.playerIndex]
+    if not s.usingHybird then 
+        return action 
+    end
     return convert_actions[action] ~= nil and convert_actions[action] or action
 end
 
 local function mario_on_set_action(m)
-    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then return end
-    if gGlobalSyncTable.movesetEnabled == false then return end
+    local s = gPlayerSyncTable[m.playerIndex]
+    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then 
+        return 
+    end
+    if not s.usingHybird then 
+        return 
+    end
     local e = gMarioStateExtras[m.playerIndex]
 
     if (m.action & ACT_FLAG_MOVING) ~= 0 then
@@ -720,8 +738,13 @@ local function mario_on_set_action(m)
 end
 
 local function before_mario_update(m)
-    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then return end
-    if gGlobalSyncTable.movesetEnabled == false then return end
+    local s = gPlayerSyncTable[m.playerIndex]
+    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then 
+        return 
+    end
+    if not s.usingHybird then 
+        return 
+    end
     local e = gMarioStateExtras[m.playerIndex]
     if e.fakeSaved == true then
         if m.action == e.fakeWroteAction and m.prevAction == e.fakeSavedPrevAction and m.actionTimer == e.fakeSavedActionTimer then
@@ -732,9 +755,12 @@ local function before_mario_update(m)
 end
 
 local function mario_update(m)
-    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then return end
+    local s = gPlayerSyncTable[m.playerIndex]
+    if not m or m.playerIndex == nil or not gMarioStateExtras[m.playerIndex] then 
+        return 
+    end
 
-    if gGlobalSyncTable.movesetEnabled == false then 
+    if not s.usingHybird then 
         if m.action == ACT_SPIN_JUMP or m.action == ACT_WALL_SLIDE then
             set_mario_action(m, ACT_FREEFALL, 0)
         end
@@ -837,40 +863,8 @@ end
 -- -------------- Commands ----------------------
 ------------------------------------------------------
 
-if gGlobalSyncTable.movesetEnabled == nil then
-    gGlobalSyncTable.movesetEnabled = true
-end
-
-local function moveset_packet(data)--Haven't changed this yet.
-    if data.type ~= PACKET_MOVESET then return end
-
-    if data.enabled then
-        djui_chat_message_create("\\#ffdd00\\Hybrid \\#ffa600\\Moveset\\#ffffff\\: \\#b7ffa1\\ON")
-    else
-        djui_chat_message_create("\\#ffdd00\\Hybrid \\#ffa600\\Moveset\\#ffffff\\: \\#ff7a7a\\OFF")
-    end
-end
-
-local function toggle_moveset_command(msg)--Seems to trigger this for everyone expect for one specific player?
-    if not network_is_server() then
-        djui_chat_message_create("\\#ff0000\\You are not the host, please don't try this command again, Ok?")
-        return true
-    end
-
-    gGlobalSyncTable.movesetEnabled = not gGlobalSyncTable.movesetEnabled
-
-    local packet = {
-        type = PACKET_MOVESET,
-        enabled = gGlobalSyncTable.movesetEnabled
-    }
-
-    network_send(true, packet)
-    moveset_packet(packet)
-
-    return true
-end
-
 local function inputs_command(msg)
+    local s = gPlayerSyncTable[0]
     djui_chat_message_create([[
 \#b7ffa1\Ground Moveset:
 \#ffbb80\(X)\#ffffff\ - Galaxy Spin | \#ff7a7a\(A)\#d1e3ff\ in mid-air\#ffffff\ - Air Dash
@@ -879,7 +873,13 @@ local function inputs_command(msg)
 
 \#b5edff\Water Moveset:
 \#7591ff\(B)\#ffffff\ - Galaxy Swim | \#7591ff\(B)\#d1e3ff\ on water surface\#ffffff\ - Dolphin Dive]])
-    return true-- = not mesagge global
+    if not s.usingHybird then
+        djui_chat_message_create([[
+\#ff7a7a\(!) - You're currently not using the moveset in order to perform these actions.
+\#ffdd00\(?) - If you wish to use them, please go into Pause/Mod Menu to enable them.]])
+    play_sound(SOUND_MENU_LET_GO_MARIO_FACE, gGlobalSoundSource)
+    end
+    return true-- = not an global message
 end
 
 ---------------------- POP-UP ------------------------
@@ -895,6 +895,9 @@ end)
 ---------------
 -- Hooks --
 ---------------
+
+hook_mod_menu_checkbox("Use moveset", gPlayerSyncTable[0].usingHybird, hybird_cmd)
+hook_chat_command("inputs", "- Moveset Info", inputs_command)
 
 hook_event(HOOK_ON_PACKET_RECEIVE, moveset_packet)
 hook_event(HOOK_BEFORE_MARIO_UPDATE, before_mario_update)
@@ -915,5 +918,3 @@ hook_mario_action(ACT_WATER_GROUND_POUND, { every_frame = act_water_ground_pound
 hook_mario_action(ACT_WATER_GROUND_POUND_LAND, { every_frame = act_water_ground_pound_land }, INT_GROUND_POUND)
 hook_mario_action(ACT_CUSTOM_AIR_HIT_WALL, { every_frame = act_air_hit_wall })
 
-hook_chat_command("inputs", "- Moveset Info", inputs_command)
-hook_chat_command("moveset", "- Toggle The Moveset", toggle_moveset_command)
