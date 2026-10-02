@@ -28,7 +28,7 @@ ACT_WATER_GROUND_POUND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SW
 ACT_WATER_GROUND_POUND_LAND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 
---gLevelValues.entryLevel = LEVEL_JRB--LEVEL START DEBUG
+--gLevelValues.entryLevel = LEVEL_BOB--LEVEL START DEBUG
 
 -----------------------------------
 ------------- Extra ------------
@@ -46,7 +46,6 @@ local SPINACTIONS = {
     [ACT_LONG_JUMP] = true,
     [ACT_JUMP_KICK] = true,
     [ACT_SIDE_FLIP] = true,
-    [ACT_FLUTTER_KICK] = true,
     [ACT_DIVE] = true,
     [ACT_FORWARD_ROLLOUT] = true,
     [ACT_BACKWARD_ROLLOUT] = true,
@@ -64,11 +63,12 @@ local WATERACTIONS = {
     [ACT_WATER_PUNCH] = true,
     [ACT_WATER_PLUNGE] = true,
     [ACT_BREASTSTROKE] = true,
-    [ACT_HOLD_BREASTSTROKE] = true,
-    [ACT_WATER_ACTION_END] = true,
-    [ACT_HOLD_WATER_IDLE] = true,
-    [ACT_HOLD_WATER_ACTION_END] = true,
-    [ACT_HOLD_SWIMMING_END] = true
+    [ACT_FLUTTER_KICK] = true,
+    [ACT_WATER_ACTION_END] = true
+    --[ACT_HOLD_WATER_IDLE] = true,
+    --[ACT_HOLD_WATER_ACTION_END] = true,
+    --[ACT_HOLD_SWIMMING_END] = true,
+    --[ACT_HOLD_BREASTSTROKE] = true
 }
 
 local AIRDASHACTIONS = {
@@ -132,14 +132,24 @@ for i = 0, (MAX_PLAYERS - 1) do
     e.animFrame = 0
     e.spinRiseTimer = 0
     e.groundPoundCooldown = 0
+    e.hangSpeed = 0
     e.didSpin = false
     e.didAirDash = false
     e.swimSpinAngle = 0
     e.GPtWP = false
+    e.didSwimDive = false
+
+    e.grabEscape = 0
+    e.grabStruggle = false
+    e.lastAnaDir = 0
 end
 
 local hybird_cmd = function(_, value)
     gPlayerSyncTable[0].usingHybird = value
+end
+
+local function random_float(min, max)
+    return min + math.random() * (max - min)
 end
 
 local function limit_angle(a)
@@ -434,7 +444,6 @@ local function act_spin_jump(m)--GALAXY SPIN / SPIN JUMP
 
 
     if m.actionTimer == 0 then
-        e.fromGround = true
         e.spinSpeed = 1
     end
 
@@ -587,6 +596,17 @@ local function act_water_ground_pound(m)--WATER GROUND POUND
     m.vel.z = 0
     m.faceAngle.z = 0
 
+    --if (m.input & INPUT_B_PRESSED) ~= 0 then--WATER DIVE (Can be done better than how it is right now.)
+        --mario_set_forward_vel(m, 1000)
+        --e.GPtWP = false
+        --e.didSwimDive = true
+        --stop_sounds_from_source(m.marioObj.header.gfx.cameraToObject)
+        --m.flags = m.flags & ~MARIO_MARIO_SOUND_PLAYED
+        --m.flags = m.flags & ~MARIO_ACTION_SOUND_PLAYED
+        --set_mario_action(m, ACT_BREASTSTROKE, 0)
+        --return
+    --end
+
     if m.actionTimer == 0 and not e.GPtWP then
         m.faceAngle.x = 0 
         m.vel.y = 0
@@ -703,6 +723,21 @@ local function act_air_hit_wall(m)
     return set_mario_animation(m, CHAR_ANIM_START_WALLKICK)
 end
 
+local function approach_yaw(current, target, maxTurn)
+    local diff = (target - current) % 65536
+    if diff > 32768 then
+        diff = diff - 65536
+    end
+
+    if diff > maxTurn then
+        diff = maxTurn
+    elseif diff < -maxTurn then
+        diff = -maxTurn
+    end
+
+    return (current + diff) % 65536
+end
+
 local function before_set_mario_action(m, action)
     local s = gPlayerSyncTable[m.playerIndex]
     if not s.usingHybird then 
@@ -738,10 +773,15 @@ local function mario_on_set_action(m)
     elseif m.prevAction == ACT_GROUND_POUND and (m.action & ACT_FLAG_SWIMMING) ~= 0 then
         e.GPtWP = true
         set_mario_action(m, ACT_WATER_GROUND_POUND, 0)
-    elseif m.action == ACT_WATER_IDLE then
+    elseif m.action == ACT_WATER_IDLE  then
         e.GPtWP = false
+        e.didSwimDive = false
     elseif m.action == ACT_LEDGE_GRAB then
         e.rotAngle = m.forwardVel
+    elseif m.action ~= ACT_GRABBED then
+        e.grabEscape = 0
+        e.grabStruggle = false
+        e.lastAnaDir = 0
     elseif m.action == ACT_ROLL then
         mario_set_forward_vel(m, math.max(m.forwardVel * 1.05, 30))
     end
@@ -783,6 +823,75 @@ local function mario_update(m)
 
     if e.groundPoundCooldown > 0 then
         e.groundPoundCooldown = e.groundPoundCooldown - 1
+    end
+
+    --ESCAPE OUT OF BEING GRABBED
+    if m.action == ACT_GRABBED then
+        if m.heldByObj ~= nil then
+            m.pos.x = m.heldByObj.oPosX
+            m.pos.y = m.heldByObj.oPosY + 50
+            m.pos.z = m.heldByObj.oPosZ
+        end
+
+        if math.abs(m.controller.stickX) > math.abs(m.controller.stickY) then
+            if m.controller.stickX > 30 then
+                anaDir = 1
+            elseif m.controller.stickX < -30 then
+                anaDir = 2
+            end
+        else
+            if m.controller.stickY > 30 then
+                anaDir = 3
+            elseif m.controller.stickY < -30 then
+                anaDir = 4
+            end
+        end
+
+        if anaDir ~= 0 and anaDir ~= e.lastAnaDir then
+            e.grabStruggle = true
+            e.lastAnaDir = anaDir
+        elseif e.lastAnaDir == anaDir then
+            e.grabStruggle = false
+        elseif anaDir == 0 then
+            e.lastAnaDir = 0
+        end
+
+        if (m.input & INPUT_A_PRESSED) ~= 0 or (m.input & INPUT_B_PRESSED) ~= 0 or e.grabStruggle then
+            if e.grabEscape <= 33 then
+                e.grabEscape = e.grabEscape + 1
+                poundSFXs = {SOUND_GENERAL_SHORT_POUND1, SOUND_GENERAL_SHORT_POUND2, SOUND_GENERAL_SHORT_POUND3, SOUND_GENERAL_SHORT_POUND4, SOUND_GENERAL_SHORT_POUND5, SOUND_GENERAL_SHORT_POUND6}
+                play_sound_with_freq_scale(poundSFXs[math.random(1, 6)], m.marioObj.header.gfx.cameraToObject, random_float(0.63, 1.33))
+                if e.grabEscape > 0 and e.grabEscape % 5 == 0 then
+                    selVoice = math.random(1, 3)
+                    strugVoices = {CHAR_SOUND_EEUH, CHAR_SOUND_UH, CHAR_SOUND_HRMM}
+                    play_mario_sound(m, 0, strugVoices[selVoice])
+                end
+                set_camera_shake_from_hit(SHAKE_SHOCK)
+            else
+                play_sound_with_freq_scale(SOUND_GENERAL_RACE_GUN_SHOT, m.marioObj.header.gfx.cameraToObject, 2)
+                set_mario_action(m, ACT_HARD_FORWARD_AIR_KB, 0)
+                m.vel.y = 23
+                e.grabEscape = 0
+                e.grabStruggle = false
+                e.lastAnaDir = 0
+                return
+            end
+        end
+    end
+
+    --FASTER MONKEY BARS
+    if m.action == ACT_HANG_MOVING then
+        local mag = math.sqrt(m.controller.stickX * m.controller.stickX + m.controller.stickY * m.controller.stickY)
+        if mag > 5 then
+            local stickStrength = math.min(mag / 64, 1)
+            m.faceAngle.y = approach_yaw(m.faceAngle.y, m.intendedYaw, 0x800)
+            e.hangSpeed = math.min(e.hangSpeed + (0.5 * stickStrength), 10)
+
+            m.pos.x = m.pos.x + stickStrength * e.hangSpeed * sins(m.faceAngle.y)
+            m.pos.z = m.pos.z + stickStrength * e.hangSpeed * coss(m.faceAngle.y)
+        else
+            e.hangSpeed = math.max(e.hangSpeed - 0.8, 0)
+        end
     end
 
     --LONG JUMP GROUND POUND
@@ -857,8 +966,9 @@ local function mario_update(m)
         end
     end
 
-    --DEBUG WATER
+    --DEBUG SPAWN
     if (m.controller.buttonPressed & Y_BUTTON) ~= 0 then
+        --spawn_sync_object(id_bhvChuckya, E_MODEL_CHUCKYA, m.pos.x - 300, m.pos.y, m.pos.z - 300, nil)
         --set_water_level(0, 10000, true)
     end
 
