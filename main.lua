@@ -28,7 +28,7 @@ ACT_WATER_GROUND_POUND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SW
 ACT_WATER_GROUND_POUND_LAND = allocate_mario_action(ACT_GROUP_SUBMERGED | ACT_FLAG_SWIMMING)
 ACT_CUSTOM_AIR_HIT_WALL = allocate_mario_action(ACT_GROUP_AIRBORNE | ACT_FLAG_AIR)
 
--- gLevelValues.entryLevel = LEVEL_SA--LEVEL START DEBUG
+--gLevelValues.entryLevel = LEVEL_JRB--LEVEL START DEBUG
 
 -----------------------------------
 ------------- Extra ------------
@@ -135,6 +135,7 @@ for i = 0, (MAX_PLAYERS - 1) do
     e.didSpin = false
     e.didAirDash = false
     e.swimSpinAngle = 0
+    e.GPtWP = false
 end
 
 local hybird_cmd = function(_, value)
@@ -580,22 +581,26 @@ local function act_air_dash_end(m)--AIR DASH END
 end
 
 local function act_water_ground_pound(m)--WATER GROUND POUND
+    local e = gMarioStateExtras[m.playerIndex]
     m.forwardVel = 0
     m.vel.x = 0
     m.vel.z = 0
     m.faceAngle.z = 0
 
-    if m.actionTimer == 0 then--Needs the spin during this, also you can move during this which isn't right.
+    if m.actionTimer == 0 and not e.GPtWP then
         m.faceAngle.x = 0 
         m.vel.y = 0
         set_mario_animation(m,CHAR_ANIM_START_GROUND_POUND)
         play_sound(SOUND_GENERAL_SWISH_WATER, m.marioObj.header.gfx.cameraToObject)
-    elseif m.actionTimer == 11 then
+    elseif (m.actionTimer == 11 and not e.GPtWP) or (e.GPtWP and m.actionTimer == 0) then
         m.vel.y = -40
+        
         set_mario_animation(m,CHAR_ANIM_GROUND_POUND)
-        play_mario_sound(m, 0, CHAR_SOUND_GROUND_POUND_WAH)
+        if not e.GPtWP then
+            play_mario_sound(m, 0, CHAR_SOUND_GROUND_POUND_WAH)
+        end
         play_sound_with_freq_scale(SOUND_GENERAL_MOVING_WATER, m.marioObj.header.gfx.cameraToObject, 2)
-    elseif m.actionTimer >= 13 then
+    elseif m.actionTimer >= 13 or e.GPtWP then
         set_mario_particle_flags(m, PARTICLE_PLUNGE_BUBBLE, 0)
     end
 
@@ -603,7 +608,7 @@ local function act_water_ground_pound(m)--WATER GROUND POUND
 
     if m.actionTimer > 30 then
         set_mario_action(m, ACT_WATER_IDLE, 0)
-    elseif waterResult == WATER_STEP_HIT_FLOOR then--Not consistent on hitting the ground.
+    elseif waterResult == WATER_STEP_HIT_FLOOR then
         play_sound(SOUND_ACTION_TERRAIN_HEAVY_LANDING, m.marioObj.header.gfx.cameraToObject)
         spawn_sync_object(id_bhvHorStarParticleSpawner, 0, m.pos.x, m.pos.y, m.pos.z, nil)
         set_mario_action(m, ACT_WATER_GROUND_POUND_LAND, 0)
@@ -730,6 +735,11 @@ local function mario_on_set_action(m)
         m.vel.y = 0.0
     elseif m.action == ACT_GROUND_POUND and m.prevAction == ACT_SIDE_FLIP then
         m.marioObj.header.gfx.angle.y = limit_angle(m.marioObj.header.gfx.angle.y - 0x8000)
+    elseif m.prevAction == ACT_GROUND_POUND and (m.action & ACT_FLAG_SWIMMING) ~= 0 then
+        e.GPtWP = true
+        set_mario_action(m, ACT_WATER_GROUND_POUND, 0)
+    elseif m.action == ACT_WATER_IDLE then
+        e.GPtWP = false
     elseif m.action == ACT_LEDGE_GRAB then
         e.rotAngle = m.forwardVel
     elseif m.action == ACT_ROLL then
