@@ -1019,7 +1019,6 @@ end)
 hook_mod_menu_checkbox("Use moveset", gPlayerSyncTable[0].usingHybird, hybird_cmd)
 hook_chat_command("inputs", "- Moveset Info", inputs_command)
 
-hook_event(HOOK_ON_PACKET_RECEIVE, moveset_packet)
 hook_event(HOOK_BEFORE_MARIO_UPDATE, before_mario_update)
 hook_event(HOOK_MARIO_UPDATE, mario_update)
 hook_event(HOOK_MARIO_UPDATE, no_fall_damage)
