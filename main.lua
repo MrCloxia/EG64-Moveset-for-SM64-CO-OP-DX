@@ -861,6 +861,9 @@ local function mario_update(m)
                 e.grabEscape = e.grabEscape + 1
                 poundSFXs = {SOUND_GENERAL_SHORT_POUND1, SOUND_GENERAL_SHORT_POUND2, SOUND_GENERAL_SHORT_POUND3, SOUND_GENERAL_SHORT_POUND4, SOUND_GENERAL_SHORT_POUND5, SOUND_GENERAL_SHORT_POUND6}
                 play_sound_with_freq_scale(poundSFXs[math.random(1, 6)], m.marioObj.header.gfx.cameraToObject, random_float(0.63, 1.33))
+                if e.grabEscape > 1 then
+                    play_sound_with_freq_scale(SOUND_MENU_YOSHI_GAIN_LIVES, m.marioObj.header.gfx.cameraToObject, (e.grabEscape / 100) + 0.98)
+                end
                 if e.grabEscape > 0 and e.grabEscape % 5 == 0 then
                     selVoice = math.random(1, 3)
                     strugVoices = {CHAR_SOUND_EEUH, CHAR_SOUND_UH, CHAR_SOUND_HRMM}
@@ -968,7 +971,7 @@ local function mario_update(m)
 
     --DEBUG SPAWN
     if (m.controller.buttonPressed & Y_BUTTON) ~= 0 then
-        --spawn_sync_object(id_bhvChuckya, E_MODEL_CHUCKYA, m.pos.x - 300, m.pos.y, m.pos.z - 300, nil)
+        --spawn_sync_object(id_bhvKingBobomb, E_MODEL_KING_BOBOMB, m.pos.x - 300, m.pos.y, m.pos.z - 300, nil)
         --set_water_level(0, 10000, true)
     end
 
